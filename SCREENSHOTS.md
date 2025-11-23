@@ -3,29 +3,29 @@
 ## Login Page
 ![Login Page](./images/Screenshot%202025-11-23%20at%2011.47.25%E2%80%AFPM.png)
 
-## Dashboard
+## Register
 ![Dashboard](./images/Screenshot%202025-11-23%20at%2011.47.30%E2%80%AFPM.png)
 
-## File Upload
+## Dashboard
 ![File Upload](./images/Screenshot%202025-11-23%20at%2011.47.43%E2%80%AFPM.png)
 
-## Processing Options
+## Pipelline History
 ![Processing Options](./images/Screenshot%202025-11-23%20at%2011.47.55%E2%80%AFPM.png)
 
-## File Details
+## Settings
 ![File Details](./images/Screenshot%202025-11-23%20at%2011.48.02%E2%80%AFPM.png)
 
-## Job Status
+## Upload 
 ![Job Status](./images/Screenshot%202025-11-23%20at%2011.48.12%E2%80%AFPM.png)
 
-## Results View
+## Upload
 ![Results View](./images/Screenshot%202025-11-23%20at%2011.48.16%E2%80%AFPM.png)
 
-## Processed Files
+## uplaoding File
 ![Processed Files](./images/Screenshot%202025-11-23%20at%2011.48.33%E2%80%AFPM.png)
 
-## File Management
+## Job Status
 ![File Management](./images/Screenshot%202025-11-23%20at%2011.48.40%E2%80%AFPM.png)
 
-## Additional Features
+## Processed Results
 ![Additional Features](./images/Screenshot%202025-11-23%20at%2011.49.12%E2%80%AFPM.png)
