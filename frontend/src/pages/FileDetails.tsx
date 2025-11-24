@@ -39,23 +39,25 @@ const FileDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchFileDetails = async () => {
+    const fetchFileDetails = async (isInitial = false) => {
       if (!fileId) return;
       
-      setIsLoading(true);
+      if (isInitial) setIsLoading(true);
       try {
         const data = await filesApi.getFile(fileId);
         setFile(data as any);
         setJobs(data.jobs || []);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to load file details");
+        if (isInitial) {
+          toast.error(error instanceof Error ? error.message : "Failed to load file details");
+        }
       } finally {
-        setIsLoading(false);
+        if (isInitial) setIsLoading(false);
       }
     };
 
-    fetchFileDetails();
-    const interval = setInterval(fetchFileDetails, 3000);
+    fetchFileDetails(true);
+    const interval = setInterval(() => fetchFileDetails(false), 3000);
     return () => clearInterval(interval);
   }, [fileId]);
 

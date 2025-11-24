@@ -50,10 +50,10 @@ const Results = () => {
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([]);
 
   useEffect(() => {
-    const fetchResults = async () => {
+    const fetchResults = async (isInitial = false) => {
       if (!fileId) return;
       
-      setIsLoading(true);
+      if (isInitial) setIsLoading(true);
       try {
         const data = await filesApi.getFile(fileId);
         console.log('Results page - Received data:', data);
@@ -63,16 +63,18 @@ const Results = () => {
         setJobs(data.jobs || []);
         setProcessedFiles(data.processed_outputs || []);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to load results");
+        if (isInitial) {
+          toast.error(error instanceof Error ? error.message : "Failed to load results");
+        }
       } finally {
-        setIsLoading(false);
+        if (isInitial) setIsLoading(false);
       }
     };
 
-    fetchResults();
+    fetchResults(true);
     
     // Poll for updates every 3 seconds
-    const interval = setInterval(fetchResults, 3000);
+    const interval = setInterval(() => fetchResults(false), 3000);
     
     // Cleanup interval on unmount
     return () => clearInterval(interval);
