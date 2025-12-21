@@ -1,24 +1,243 @@
 # FileForge
 
-A powerful cloud-based file processing platform with intelligent automation capabilities. Upload files and automatically process them with image conversion, video processing, AI tagging, virus scanning, encryption, and more.
+A **production-grade** cloud-based file processing platform demonstrating distributed systems, async processing, and microservices architecture. Built as a learning project showcasing real-world patterns used at companies like Dropbox, Google Photos, and Netflix.
 
-## 🏗️ Architecture
+> **Interview-Ready**: This project demonstrates async job queues, horizontal scaling, fault tolerance, and observability patterns commonly asked in system design interviews.
+
+---
+
+## 🏗️ System Architecture
+
+### High-Level Overview
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              FILEFORGE ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│    ┌──────────┐     ┌──────────────────────────────────────────────────┐    │
+│    │  React   │────▶│                   NGINX                          │    │
+│    │ Frontend │◀────│              (Reverse Proxy)                     │    │
+│    └──────────┘     │         Load Balancing, SSL Termination          │    │
+│                     └───────────────────┬──────────────────────────────┘    │
+│                                         │                                    │
+│                                         ▼                                    │
+│                     ┌──────────────────────────────────────────────────┐    │
+│                     │              FastAPI Backend                      │    │
+│                     │     • JWT Auth  • File Management  • Job API     │    │
+│                     │     • /health endpoint for observability         │    │
+│                     └─────────┬──────────────┬──────────────┬──────────┘    │
+│                               │              │              │               │
+│              ┌────────────────┼──────────────┼──────────────┼────────────┐  │
+│              │                ▼              ▼              ▼            │  │
+│              │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │  │
+│              │  │  PostgreSQL  │  │    MinIO     │  │    RabbitMQ      │ │  │
+│              │  │  (Metadata)  │  │   (Files)    │  │   (Job Queue)    │ │  │
+│              │  │              │  │              │  │                  │ │  │
+│              │  │ • Users      │  │ • raw/       │  │ • image_queue    │ │  │
+│              │  │ • Files      │  │ • processed/ │  │ • video_queue    │ │  │
+│              │  │ • Jobs       │  │ • thumbnails/│  │ • security_queue │ │  │
+│              │  │              │  │ • encrypted/ │  │ • ai_queue       │ │  │
+│              │  └──────────────┘  └──────────────┘  └────────┬─────────┘ │  │
+│              │           DATA LAYER                          │           │  │
+│              └───────────────────────────────────────────────┼───────────┘  │
+│                                                              │              │
+│                                                              ▼              │
+│     ┌────────────────────────────────────────────────────────────────────┐  │
+│     │                     WORKER POOL (Microservices)                    │  │
+│     │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │  │
+│     │  │   Image     │ │   Video     │ │  Security   │ │     AI      │  │  │
+│     │  │  Processor  │ │  Processor  │ │   Worker    │ │   Tagger    │  │  │
+│     │  │             │ │             │ │             │ │             │  │  │
+│     │  │ • Thumbnail │ │ • Transcode │ │ • ClamAV    │ │ • Gemini    │  │  │
+│     │  │ • Convert   │ │ • Preview   │ │ • Encrypt   │ │ • Auto-tag  │  │  │
+│     │  │ • Compress  │ │ • Thumbnail │ │ • Decrypt   │ │ • Analyze   │  │  │
+│     │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │  │
+│     │         Horizontally Scalable: docker-compose up --scale          │  │
+│     └────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Diagram
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           FILE PROCESSING FLOW                              │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. UPLOAD PHASE                                                            │
+│  ┌──────┐    POST /init-upload     ┌─────────┐    Presigned URL   ┌──────┐ │
+│  │Client│ ─────────────────────▶   │ Backend │ ────────────────▶  │MinIO │ │
+│  └──────┘                          └─────────┘                    └──────┘ │
+│      │                                                                │     │
+│      │         PUT (direct upload using presigned URL)                │     │
+│      └────────────────────────────────────────────────────────────────┘     │
+│                                                                             │
+│  2. PROCESSING PHASE                                                        │
+│  ┌──────┐  POST /complete-upload   ┌─────────┐   Publish Job   ┌─────────┐ │
+│  │Client│ ─────────────────────▶   │ Backend │ ──────────────▶ │RabbitMQ │ │
+│  └──────┘                          └─────────┘                 └────┬────┘ │
+│                                         │                           │      │
+│                                    Create Job                  Consume     │
+│                                    Record (DB)                      │      │
+│                                         │                           ▼      │
+│                                         │                    ┌──────────┐  │
+│                                         └──────────────────▶ │  Worker  │  │
+│                                                              └────┬─────┘  │
+│  3. COMPLETION PHASE                                              │        │
+│                                    ┌─────────┐  Update Status     │        │
+│                              ┌──── │   DB    │ ◀──────────────────┤        │
+│                              │     └─────────┘                    │        │
+│                              │                                    ▼        │
+│                              │     ┌─────────┐   Upload Result  ┌──────┐   │
+│                              └───▶ │ Backend │ ◀──────────────  │MinIO │   │
+│                                    └─────────┘                  └──────┘   │
+│                                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 Implementation Status
+
+### ✅ Implemented (Production-Ready)
+
+| Feature | Description | Key Files |
+|---------|-------------|-----------|
+| **JWT Authentication** | Secure user registration/login with bcrypt password hashing | `backend/app/core/security.py` |
+| **Presigned URL Uploads** | Direct-to-storage uploads bypassing backend (like S3) | `backend/app/services/minio.py` |
+| **Async Job Queue** | RabbitMQ-based distributed job processing | `backend/app/services/rabbitmq.py` |
+| **Image Processing** | Thumbnail, format conversion, compression via Pillow | `workers/image_processor/` |
+| **Video Processing** | Transcode, preview clips, thumbnails via FFmpeg | `workers/video_processor/` |
+| **Virus Scanning** | ClamAV integration for malware detection | `workers/security/` |
+| **File Encryption** | AES encryption/decryption at rest | `workers/security/` |
+| **AI Tagging** | Google Gemini-powered auto-tagging | `workers/ai_tagger/` |
+| **Database Migrations** | Alembic for schema versioning | `backend/alembic/` |
+| **Health Endpoint** | `/health` for container orchestration | `backend/app/main.py` |
+| **React Dashboard** | Modern UI with Tailwind + shadcn/ui | `frontend/src/` |
+
+### 🚧 Planned (Not Yet Implemented)
+
+| Feature | Priority | Complexity | Notes |
+|---------|----------|------------|-------|
+| WebSocket job updates | High | Medium | Replace polling with push notifications |
+| Rate limiting | High | Low | Use Redis + sliding window algorithm |
+| File sharing/permissions | Medium | Medium | ACL system for shared access |
+| Batch operations | Medium | Low | Bulk upload/process API |
+| Retry with exponential backoff | High | Low | Currently single-attempt processing |
+| Dead letter queue | High | Low | Failed jobs need DLQ handling |
+| Distributed tracing | Medium | Medium | Jaeger/Zipkin integration |
+| CDN integration | Low | Medium | CloudFront/Cloudflare for static assets |
+
+---
+
+## ⚠️ Failure Scenarios & Handling
+
+### Current Failure Handling
+
+| Failure Type | Current Behavior | Impact | Improvement Needed |
+|-------------|------------------|--------|-------------------|
+| **Worker crashes mid-job** | Job stays in RUNNING state | Orphaned jobs | Add heartbeat + timeout mechanism |
+| **RabbitMQ unavailable** | Backend returns 500 | Uploads fail | Add circuit breaker pattern |
+| **MinIO unavailable** | Presigned URL generation fails | Upload blocked | Graceful degradation |
+| **Database unavailable** | All requests fail | System down | Connection pooling + retries |
+| **Job processing fails** | Status set to FAILED | User informed | Retry queue + DLQ |
+
+### What Happens When a Worker Crashes?
 
 ```
-Clients (Browser/API)
-        ↓
-    NGINX (Reverse Proxy)
-        ↓
-    Backend API (FastAPI)
-   ↙️    ↓    ↘️
-MinIO  Postgres  RabbitMQ
-              ↓
-        Worker Microservices
-        - Image Processor
-        - Video Processor
-        - Security Worker
-        - AI Tagger
+Current Flow (Problem):
+1. Worker picks up job from queue
+2. Worker ACKs message immediately ❌
+3. Worker crashes during processing
+4. Job stuck in RUNNING forever
+5. No automatic retry
+
+Ideal Flow (Planned):
+1. Worker picks up job
+2. Worker processes job
+3. Worker ACKs only AFTER success ✅
+4. If crash: RabbitMQ redelivers to another worker
+5. Max retries → Dead Letter Queue
 ```
+
+---
+
+## 🔄 Trade-offs & Design Decisions
+
+### Why RabbitMQ over Kafka/Redis?
+
+| Criteria | RabbitMQ ✅ | Kafka | Redis (Queue) |
+|----------|-----------|-------|---------------|
+| **Use Case Fit** | Task queues, job processing | Event streaming, logs | Lightweight caching |
+| **Message Acknowledgment** | Built-in, per-message | Offset-based | Limited |
+| **Delivery Guarantee** | At-least-once ✅ | At-least-once | At-most-once |
+| **Learning Curve** | Moderate | Steep | Easy |
+| **Ordering** | Per-queue FIFO | Per-partition | FIFO |
+| **Scalability** | Good for our scale | Overkill | Limited |
+
+**Decision**: RabbitMQ is the right choice for job queues with individual ACKs and retry semantics.
+
+### Why MinIO over Direct Filesystem?
+
+| Criteria | MinIO ✅ | Filesystem |
+|----------|---------|------------|
+| **S3 Compatibility** | Full API compatibility | None |
+| **Presigned URLs** | Built-in | Manual implementation |
+| **Horizontal Scaling** | Distributed mode | NFS/shared storage |
+| **Cloud Migration** | Swap to S3 easily | Major refactor |
+| **Bucket Policies** | Native | Manual |
+
+**Decision**: MinIO provides S3-compatible storage that makes cloud migration trivial.
+
+### Sync vs Async Processing
+
+| Approach | Pros | Cons | When to Use |
+|----------|------|------|-------------|
+| **Sync** | Simple, immediate response | Blocks request, timeout risk | Small files, fast operations |
+| **Async ✅** | Non-blocking, scalable | Complex, eventual consistency | Large files, slow processing |
+
+**Decision**: Async processing is essential for video transcoding (can take minutes) and AI tagging (API latency).
+
+### Monolith vs Microservices Workers
+
+| Approach | Pros | Cons | Our Choice |
+|----------|------|------|------------|
+| **Single Worker** | Simple deployment | Can't scale independently | ❌ |
+| **Per-Type Workers ✅** | Independent scaling, isolation | More containers | ✅ |
+
+**Decision**: Separate workers allow scaling video processors independently (expensive) from image processors (cheap).
+
+---
+
+## 🔍 Observability
+
+### Health Check Endpoint
+
+```bash
+GET /health
+# Response: {"status": "healthy"}
+```
+
+Used by Docker Compose healthchecks and container orchestration.
+
+### Structured Logging
+
+All workers use structured logging with job_id for traceability:
+```
+2024-01-15 10:30:45 - image_processor - INFO - Processing job abc-123 of type thumbnail
+2024-01-15 10:30:47 - image_processor - INFO - Job abc-123 completed successfully
+```
+
+### Monitoring Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Liveness probe |
+| RabbitMQ `:15672` | Queue metrics, message rates |
+| MinIO `:9001` | Storage metrics, bucket stats |
+| PostgreSQL | Connection pool stats via pg_stat |
+
+---
 
 ## 🚀 Features
 
