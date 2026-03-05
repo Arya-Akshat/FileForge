@@ -2,7 +2,6 @@
 
 A **production-grade** cloud-based file processing platform demonstrating distributed systems, async processing, and microservices architecture. Built as a learning project showcasing real-world patterns used at companies like Dropbox, Google Photos, and Netflix.
 
-> **Interview-Ready**: This project demonstrates async job queues, horizontal scaling, fault tolerance, and observability patterns commonly asked in system design interviews.
 
 ---
 
